@@ -36,6 +36,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.3",
     "@prisma/client": "^6.0.0",
+    "@sendgrid/mail": "^8.1.6",
     "@supabase/supabase-js": "^2.89.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
@@ -100,5 +101,8 @@
     ],
     "coverageDirectory": "coverage",
     "testEnvironment": "node"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

@@ -72,7 +72,20 @@ export class OrdersService {
         ? {
             OR: [
               { orderNumber: { contains: search, mode: 'insensitive' } },
-              { customer: { name: { contains: search, mode: 'insensitive' } } },
+              {
+                customer: {
+                  is: {
+                    firstName: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                customer: {
+                  is: {
+                    lastName: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
               { service: { name: { contains: search, mode: 'insensitive' } } },
             ],
           }
@@ -86,7 +99,9 @@ export class OrdersService {
         skip,
         take,
         include: {
-          customer: { select: { id: true, name: true, email: true } },
+          customer: {
+            select: { id: true, firstName: true, lastName: true, email: true },
+          },
           service: { select: { id: true, name: true } },
           technician: { select: { id: true, name: true } },
         },

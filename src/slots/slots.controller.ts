@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { SlotStatus } from '@prisma/client';
 import { Roles } from '../common/decorator/rolesDecorator';
@@ -8,13 +17,13 @@ import { UpdateSlotDto } from './dto/update-slot.dto';
 import { SlotsService } from './slots.service';
 
 @ApiTags('Slots')
-@Roles('ADMIN', 'STAFF')
+@Roles('ADMIN')
 @Controller('slots')
 export class SlotsController {
   constructor(private readonly slotsService: SlotsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new slot' })
+  @ApiOperation({ summary: 'Create slots for a day' })
   create(@Body() createSlotDto: CreateSlotDto) {
     return this.slotsService.create(createSlotDto);
   }
@@ -23,10 +32,7 @@ export class SlotsController {
   @ApiOperation({ summary: 'Get all slots' })
   @ApiQuery({ name: 'status', required: false, enum: SlotStatus })
   @ApiQuery({ name: 'date', required: false })
-  findAll(
-    @Query('status') status?: SlotStatus,
-    @Query('date') date?: string,
-  ) {
+  findAll(@Query('status') status?: SlotStatus, @Query('date') date?: string) {
     return this.slotsService.findAll({
       status,
       date,

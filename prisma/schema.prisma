@@ -15,7 +15,6 @@ enum Role {
   CUSTOMER
   TECHNICIAN
   ADMIN
-  STAFF
 }
 
 enum CustomerStatus {
@@ -97,6 +96,8 @@ model User {
   email        String   @unique
   passwordHash String
   role         Role     @default(CUSTOMER)
+  refreshTokenHash String? @unique
+  refreshTokenExpiresAt DateTime?
 
   isVerified   Boolean  @default(false)
   isBlocked    Boolean  @default(false)
@@ -111,11 +112,9 @@ model User {
   resetOtpExpireIn        DateTime?
   resetOtpAttempts        Int      @default(0)
 
-  // Profile links (customer only)
-  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  technician  Technician?  @relation(fields: [technicianId], references: [id], onDelete: SetNull)
-  customerId  String?
-  technicianId String?
+  // Profile links
+  customer    Customer?
+  technician  Technician?
 
   // Orders for confirmation/rejection/cancellation
   confirmedOrders      Order[]        @relation("OrderConfirmedBy")
@@ -135,6 +134,7 @@ model Customer {
   userId       String?        @unique
   user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  profileImage String?      
   customerCode String         @unique // e.g. cust-1
   firstName    String
   lastName     String
@@ -198,6 +198,7 @@ model Technician {
   userId        String?          @unique
   user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+profileImage String? 
   name          String
   email         String           @unique
   phone         String?
@@ -222,15 +223,32 @@ model Technician {
   @@index([isVerified])
 }
 
+model TechnicianSpecialization {
+  technicianId     String
+  specializationId String
+
+  technician     Technician   @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  specialization Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([technicianId, specializationId])
+  @@index([specializationId])
+}
+
+model Specialization {
+  id           String                   @id @default(uuid())
+  name         String                   @unique
+  technicians  TechnicianSpecialization[]
+}
+
 model TechnicianReview {
-  id           String @id @default(uuid())
-  orderId      String @unique
-  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid())
+  orderId      String    @unique
+  order        Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   technicianId String
   technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
 
-  rating       Int // 1-5
+  rating       Int    // 1-5
   comment      String?
 
   createdAt    DateTime @default(now())
@@ -298,6 +316,9 @@ model Equipment {
   customerId   String
   customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
+  addressId    String?
+  address      Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
   manufacturer String?
   modelNumber  String?
   serialNumber String?
@@ -306,10 +327,8 @@ model Equipment {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Associated with appointments
-  appointments Order[]
-
   @@index([customerId])
+  @@index([addressId])
   @@index([serialNumber])
 }
 
@@ -318,52 +337,70 @@ model Equipment {
 //
 
 model Order {
-  id           String @id @default(uuid())
-  orderNumber  String @unique // e.g., ORD-1284
+  id              String   @id @default(uuid())
+  orderNumber     String   @unique // e.g., ORD-1284
 
-  customerId   String
-  customer     Customer @relation(fields: [customerId], references: [id])
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
 
-  serviceId    String
-  service      Service  @relation(fields: [serviceId], references: [id])
+  serviceId       String
+  service         Service  @relation(fields: [serviceId], references: [id])
 
-  technicianId String?
-  technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  technicianId    String?
+  technician      Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
 
-  addressId    String?
-  address      Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  addressId       String?
+  address         Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
 
   // Booking schedule
-  preferredDate DateTime?
-  slotId String?
-  slot   Slot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  preferredDate   DateTime?
+  slotId          String?
+  slot            Slot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
 
-  urgency      Urgency @default(NORMAL)
-  status       OrderStatus @default(PENDING_CONFIRMATION)
+  urgency         Urgency   @default(NORMAL)
+  status          OrderStatus @default(PENDING_CONFIRMATION)
 
-  amount       Decimal @db.Decimal(10, 2)
+  amount          Decimal   @db.Decimal(10, 2)
 
-  selectedIssues String[] // ["Not cooling","Strange noise"]
+  selectedIssues  String[]  // ["Not cooling","Strange noise"]
 
-  notes        String?
+  notes           String?
 
   // Confirmation / Rejection / Cancellation audits
-  confirmedAt       DateTime?
+  confirmedAt     DateTime?
   confirmedByUserId String?
-  confirmedBy       User? @relation("OrderConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+  confirmedBy     User?     @relation("OrderConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
 
-  cancelledAt        DateTime?
-  cancelledByUserId  String?
-  cancelledBy        User? @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  rejectedAt      DateTime?
+  rejectedByUserId String?
+  rejectedBy      User?     @relation("OrderRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+  rejectionReason String?
+
+  cancelledAt     DateTime?
+  cancelledByUserId String?
+  cancelledBy     User?     @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
   cancellationReason String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  equipment    OrderEquipmentSnapshot?
-  media        OrderMedia[]
-  transactions Transaction[]
+  // Relations to technicianReview and equipment snapshot
+  review           TechnicianReview?
+  equipment        OrderEquipmentSnapshot?
+
+  media            OrderMedia[]
+  transactions     Transaction[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([technicianId])
+  @@index([serviceId])
+  @@index([addressId])
+  @@index([slotId])
+  @@index([preferredDate])
+  @@index([createdAt])
 }
+
 
 model OrderEquipmentSnapshot {
   id        String @id @default(uuid())
@@ -435,5 +472,43 @@ model Transaction {
 
   @@index([orderId])
   @@index([status])
+}
+
+//
+// SETTINGS: Legal + FAQ + Notification Templates
+//
+
+model SettingsContent {
+  id        String       @id @default(uuid())
+  type      SettingsType @unique
+  content   String       @db.Text
+  updatedAt DateTime     @updatedAt
+}
+
+model Faq {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model NotificationTemplate {
+  id        String   @id @default(uuid())
+  title     String
+  body      String
+
+  isActive  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
 }
 

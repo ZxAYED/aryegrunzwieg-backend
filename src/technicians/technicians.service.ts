@@ -80,7 +80,7 @@ export class TechniciansService {
       where: { id },
       include: {
         orders: {
-          orderBy: { scheduledAt: 'desc' },
+          orderBy: { createdAt: 'desc' },
           take: 10,
         },
       },

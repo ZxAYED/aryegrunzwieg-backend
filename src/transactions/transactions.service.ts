@@ -36,7 +36,7 @@ export class TransactionsService {
         include: {
           order: {
             include: {
-              customer: { select: { name: true } },
+              customer: { select: { firstName: true, lastName: true } },
               service: { select: { name: true } },
             },
           },
@@ -118,7 +118,7 @@ export class TransactionsService {
       include: {
         order: {
           include: {
-            customer: { select: { name: true } },
+            customer: { select: { firstName: true, lastName: true } },
             service: { select: { name: true } },
           },
         },

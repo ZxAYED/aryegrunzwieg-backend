@@ -35,7 +35,7 @@ export class FinancialsController {
     const csvRows = data
       .map(
         (t) =>
-          `${t.txnId},${t.date.toISOString()},${t.order.customer.name},${t.order.service.name},${t.amount.toString()},${t.techPayout.toString()},${t.platformFee.toString()},${t.status}`,
+          `${t.txnId},${t.date.toISOString()},${t.order.customer.firstName} ${t.order.customer.lastName},${t.order.service.name},${t.amount.toString()},${t.techPayout.toString()},${t.platformFee.toString()},${t.status}`,
       )
       .join('\n');
 

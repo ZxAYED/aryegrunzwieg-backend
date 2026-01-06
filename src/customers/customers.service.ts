@@ -16,8 +16,11 @@ export class CustomersService {
 
     return this.prisma.customer.create({
       data: {
-        ...createCustomerDto,
         customerCode,
+        firstName: createCustomerDto.firstName,
+        lastName: createCustomerDto.lastName,
+        email: createCustomerDto.email,
+        phone: createCustomerDto.phone,
       },
     });
   }
@@ -29,7 +32,8 @@ export class CustomersService {
     const where: Prisma.CustomerWhereInput = search
       ? {
           OR: [
-            { name: { contains: search, mode: 'insensitive' } },
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
             { email: { contains: search, mode: 'insensitive' } },
             { phone: { contains: search, mode: 'insensitive' } },
             { customerCode: { contains: search, mode: 'insensitive' } },

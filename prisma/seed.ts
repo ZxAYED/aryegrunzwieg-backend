@@ -1,55 +1,108 @@
-import { CustomerStatus, PrismaClient, Role } from '@prisma/client';
+import {
+  CustomerStatus,
+  PrismaClient,
+  Role,
+  TechnicianStatus,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
-const prisma = new PrismaClient();
-
-async function seed() {
+export async function seedDefaults(prisma: PrismaClient) {
   console.log('Seeding database...');
 
+  const adminEmail = 'admin@gmail.com';
   const adminPassword = await bcrypt.hash('123456', 10);
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@gmail.com' },
-    update: {},
-    create: {
-      email: 'admin@gmail.com',
-      name: 'Admin User',
-      passwordHash: adminPassword,
-      role: Role.ADMIN,
-      isVerified: true,
-    },
-  });
-  console.log('Created Admin:', admin.email);
+  const admin = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (!admin) {
+    const created = await prisma.user.create({
+      data: {
+        email: adminEmail,
+        passwordHash: adminPassword,
+        role: Role.ADMIN,
+        isVerified: true,
+      },
+    });
+    console.log('Created Admin:', created.email);
+  }
 
+  const customerEmail = 'customer@gmail.com';
   const customerPassword = await bcrypt.hash('123456', 10);
-  const customerUser = await prisma.user.upsert({
-    where: { email: 'customer@gmail.com' },
-    update: {},
-    create: {
-      email: 'customer@gmail.com',
-      name: 'Customer User',
-      passwordHash: customerPassword,
-      role: Role.CUSTOMER,
-      isVerified: true,
-    },
+  let customerUser = await prisma.user.findUnique({
+    where: { email: customerEmail },
   });
+  if (!customerUser) {
+    customerUser = await prisma.user.create({
+      data: {
+        email: customerEmail,
+        passwordHash: customerPassword,
+        role: Role.CUSTOMER,
+        isVerified: true,
+      },
+    });
+    console.log('Created Customer User:', customerUser.email);
+  }
 
-  const customerProfile = await prisma.customer.upsert({
-    where: { email: 'customer@gmail.com' },
-    update: {},
-    create: {
-      customerCode: 'CUST-001',
-      userId: customerUser.id,
-      name: 'Customer User',
-      email: 'customer@gmail.com',
-      status: CustomerStatus.ACTIVE,
-    },
+  const customerProfile = await prisma.customer.findUnique({
+    where: { email: customerEmail },
   });
-  console.log('Created Customer:', customerProfile.email);
+  if (!customerProfile) {
+    const created = await prisma.customer.create({
+      data: {
+        customerCode: 'CUST-001',
+        userId: customerUser.id,
+        firstName: 'Customer',
+        lastName: 'User',
+        email: customerEmail,
+        status: CustomerStatus.ACTIVE,
+      },
+    });
+    console.log('Created Customer:', created.email);
+  }
+
+  const technicianEmail = 'technician@gmail.com';
+  const technicianPassword = await bcrypt.hash('123456', 10);
+  let technicianUser = await prisma.user.findUnique({
+    where: { email: technicianEmail },
+  });
+  if (!technicianUser) {
+    technicianUser = await prisma.user.create({
+      data: {
+        email: technicianEmail,
+        passwordHash: technicianPassword,
+        role: Role.TECHNICIAN,
+        isVerified: true,
+      },
+    });
+    console.log('Created Technician User:', technicianUser.email);
+  }
+
+  const technicianProfile = await prisma.technician.findUnique({
+    where: { email: technicianEmail },
+  });
+  if (!technicianProfile) {
+    const created = await prisma.technician.create({
+      data: {
+        userId: technicianUser.id,
+        name: 'Technician User',
+        email: technicianEmail,
+        phone: '+1 (555) 123-4567',
+        status: TechnicianStatus.AVAILABLE,
+        isVerified: true,
+      },
+    });
+    console.log('Created Technician:', created.email);
+  }
 
   console.log('Seeding completed.');
 }
 
-seed().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  const prisma = new PrismaClient();
+  seedDefaults(prisma)
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await prisma.$disconnect();
+    });
+}

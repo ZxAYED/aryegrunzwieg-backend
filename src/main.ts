@@ -4,6 +4,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseEnvelopeInterceptor } from './common/interceptors/response-envelope.interceptor';
+import { PrismaService } from './prisma/prisma.service';
+import { seedDefaults } from '../prisma/seed';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -22,6 +24,12 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new AllExceptionsFilter(app.get(HttpAdapterHost)));
   app.useGlobalInterceptors(new ResponseEnvelopeInterceptor());
+  const prisma = app.get(PrismaService);
+  try {
+    await seedDefaults(prisma);
+  } catch (error) {
+    console.warn('Seed skipped:', error);
+  }
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Nest Postgres Template')
