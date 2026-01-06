@@ -1,0 +1,439 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//
+// ENUMS
+//
+
+enum Role {
+  CUSTOMER
+  TECHNICIAN
+  ADMIN
+  STAFF
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum TechnicianStatus {
+  AVAILABLE
+  ON_JOB
+  OFFLINE
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Urgency {
+  NORMAL
+  URGENT
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  DISABLED
+}
+
+enum SystemType {
+  REGULAR
+  SPLIT
+  COMMERCIAL
+  OTHER
+}
+
+enum SettingsType {
+  TERMS
+  PRIVACY
+  ACCEPTANCE
+  CONTACT
+}
+
+//
+// USERS + PROFILES
+//
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+
+  isVerified   Boolean  @default(false)
+  isBlocked    Boolean  @default(false)
+  isDeleted    Boolean  @default(false)
+
+  // OTP fields
+  registrationOtp         String?
+  registrationOtpExpireIn DateTime?
+  registrationOtpAttempts Int      @default(0)
+
+  resetOtp                String?
+  resetOtpExpireIn        DateTime?
+  resetOtpAttempts        Int      @default(0)
+
+  // Profile links (customer only)
+  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  technician  Technician?  @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+  customerId  String?
+  technicianId String?
+
+  // Orders for confirmation/rejection/cancellation
+  confirmedOrders      Order[]        @relation("OrderConfirmedBy")
+  rejectedOrders       Order[]        @relation("OrderRejectedBy")
+  cancelledOrders      Order[]        @relation("OrderCancelledBy")
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([role])
+  @@index([isDeleted])
+  @@index([isBlocked])
+}
+
+model Customer {
+  id           String         @id @default(uuid())
+  userId       String?        @unique
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  customerCode String         @unique // e.g. cust-1
+  firstName    String
+  lastName     String
+  email        String         @unique
+  phone        String?
+  status       CustomerStatus @default(ACTIVE)
+
+  joinedAt     DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  addresses    Address[]
+  orders       Order[]
+  equipment    Equipment[]
+
+  @@index([status])
+  @@index([joinedAt])
+}
+
+model Address {
+  id          String       @id @default(uuid())
+  customerId  String
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  label       AddressLabel @default(HOME)
+  nickname    String?
+  contactName String?
+
+  addressLine String
+  apartment   String?
+  city        String
+  state       String
+  zip         String
+
+  lat         Float?
+  lng         Float?
+
+  notesForTechnician String?
+
+  isDefault   Boolean      @default(false)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  orders      Order[]
+  equipment   Equipment[]
+
+  @@index([customerId])
+  @@index([isDefault])
+  @@index([city])
+  @@index([state])
+  @@index([zip])
+}
+
+//
+// TECHNICIANS + SPECIALIZATIONS + REVIEWS
+//
+
+model Technician {
+  id            String           @id @default(uuid())
+  userId        String?          @unique
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  name          String
+  email         String           @unique
+  phone         String?
+
+  status        TechnicianStatus @default(OFFLINE)
+  isVerified    Boolean          @default(false)
+
+  // Denormalized stats for fast dashboards
+  ratingAvg     Float            @default(0.0)
+  ratingCount   Int              @default(0)
+  jobsAssigned  Int              @default(0)
+  jobsCompleted Int              @default(0)
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  orders        Order[]
+  specializations TechnicianSpecialization[]
+  reviews       TechnicianReview[]
+
+  @@index([status])
+  @@index([isVerified])
+}
+
+model TechnicianReview {
+  id           String @id @default(uuid())
+  orderId      String @unique
+  order        Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  technicianId String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  rating       Int // 1-5
+  comment      String?
+
+  createdAt    DateTime @default(now())
+
+  @@index([technicianId])
+}
+
+//
+// SERVICES (ADMIN ENTERS ISSUES AS CSV => STORED AS ARRAY)
+//
+
+model Service {
+  id           String        @id @default(uuid())
+  name         String
+  category     String
+  basePrice    Decimal       @db.Decimal(10, 2)
+  status       ServiceStatus @default(ACTIVE)
+
+  // Comma-separated in UI, stored as array
+  commonIssues String[]
+
+  // Quick stats (optional)
+  assignedJobs  Int   @default(0)
+  completedJobs Int   @default(0)
+  ratingAvg     Float @default(0.0)
+  ratingCount   Int   @default(0)
+
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  orders       Order[]
+
+  @@index([status])
+  @@index([category])
+  @@index([name])
+}
+
+//
+// SLOT MANAGEMENT
+//
+
+model Slot {
+  id        String   @id @default(uuid())
+  date      DateTime // store date (midnight) logically
+  startTime String   // "20:00"
+  endTime   String   // "21:00"
+  status    SlotStatus @default(AVAILABLE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+
+  @@index([date])
+  @@index([status])
+}
+
+//
+// EQUIPMENT (LONG TERM) + ORDER SNAPSHOT (ORDER DETAILS MODAL)
+//
+
+model Equipment {
+  id           String   @id @default(uuid())
+
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  manufacturer String?
+  modelNumber  String?
+  serialNumber String?
+  systemType   SystemType @default(REGULAR)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Associated with appointments
+  appointments Order[]
+
+  @@index([customerId])
+  @@index([serialNumber])
+}
+
+//
+// ORDERS (BOOKING INCLUDES ADDRESS, SLOT, ISSUES, MEDIA, EQUIPMENT SNAPSHOT)
+//
+
+model Order {
+  id           String @id @default(uuid())
+  orderNumber  String @unique // e.g., ORD-1284
+
+  customerId   String
+  customer     Customer @relation(fields: [customerId], references: [id])
+
+  serviceId    String
+  service      Service  @relation(fields: [serviceId], references: [id])
+
+  technicianId String?
+  technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+
+  addressId    String?
+  address      Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  // Booking schedule
+  preferredDate DateTime?
+  slotId String?
+  slot   Slot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+
+  urgency      Urgency @default(NORMAL)
+  status       OrderStatus @default(PENDING_CONFIRMATION)
+
+  amount       Decimal @db.Decimal(10, 2)
+
+  selectedIssues String[] // ["Not cooling","Strange noise"]
+
+  notes        String?
+
+  // Confirmation / Rejection / Cancellation audits
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  confirmedBy       User? @relation("OrderConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancelledBy        User? @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  cancellationReason String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  equipment    OrderEquipmentSnapshot?
+  media        OrderMedia[]
+  transactions Transaction[]
+}
+
+model OrderEquipmentSnapshot {
+  id        String @id @default(uuid())
+  orderId   String @unique
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  manufacturer String?
+  modelNumber  String?
+  serialNumber String?
+  systemType   SystemType?
+
+  floors       OrderEquipmentFloorInlet[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model OrderMedia {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type      MediaType
+
+  bucket    String
+  objectKey String
+  fileName  String?
+  publicUrl String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([bucket, objectKey])
+}
+
+model OrderEquipmentFloorInlet {
+  id         String @id @default(uuid())
+  snapshotId String
+  snapshot   OrderEquipmentSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  floorName  String
+  inletCount Int
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([snapshotId])
+}
+
+//
+// FINANCIALS
+//
+
+model Transaction {
+  id          String            @id @default(uuid())
+  txnId       String            @unique // TXN-1284
+
+  orderId     String
+  order       Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  amount      Decimal           @db.Decimal(10, 2)
+  techPayout  Decimal           @db.Decimal(10, 2)
+  platformFee Decimal           @db.Decimal(10, 2)
+
+  status      TransactionStatus @default(PENDING)
+  date        DateTime          @default(now())
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}
+
