@@ -10,13 +10,13 @@ export async function seedDefaults(prisma: PrismaClient) {
   console.log('Seeding database...');
 
   const adminEmail = 'admin@gmail.com';
-  const adminPassword = await bcrypt.hash('123456', 10);
+  const Password = await bcrypt.hash('123456', 10);
   const admin = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!admin) {
     const created = await prisma.user.create({
       data: {
         email: adminEmail,
-        passwordHash: adminPassword,
+        passwordHash: Password,
         role: Role.ADMIN,
         isVerified: true,
       },
@@ -25,7 +25,7 @@ export async function seedDefaults(prisma: PrismaClient) {
   }
 
   const customerEmail = 'customer@gmail.com';
-  const customerPassword = await bcrypt.hash('123456', 10);
+  
   let customerUser = await prisma.user.findUnique({
     where: { email: customerEmail },
   });
@@ -33,7 +33,7 @@ export async function seedDefaults(prisma: PrismaClient) {
     customerUser = await prisma.user.create({
       data: {
         email: customerEmail,
-        passwordHash: customerPassword,
+        passwordHash: Password,
         role: Role.CUSTOMER,
         isVerified: true,
       },
@@ -52,6 +52,7 @@ export async function seedDefaults(prisma: PrismaClient) {
         firstName: 'Customer',
         lastName: 'User',
         email: customerEmail,
+        
         status: CustomerStatus.ACTIVE,
       },
     });

@@ -35,10 +35,12 @@ export class SignupDto {
   apt?: string;
 
   @IsString()
+  @ApiProperty({ example: 'New York' })
   @IsNotEmpty()
   city!: string;
 
   @IsString()
+  @ApiProperty({ example: 'NY' })
   @IsNotEmpty()
   state!: string;
 
@@ -46,9 +48,11 @@ export class SignupDto {
   @Matches(/^\d{5}(-\d{4})?$/, {
     message: 'zip must be a valid US ZIP code',
   })
+  @ApiProperty({ example: '10001' })
   zip!: string;
 
   @IsEmail()
+  @ApiProperty({ example: 'john.doe@example.com' })
   email!: string;
 
   @IsString()
@@ -57,5 +61,6 @@ export class SignupDto {
   //   message:
   //     'password must include upper, lower, number, and special character',
   // })
+  @ApiProperty({ example: 'Password123!' })
   password!: string;
 }

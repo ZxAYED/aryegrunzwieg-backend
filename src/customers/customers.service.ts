@@ -2,41 +2,26 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CustomerAddressDto } from './dto/create-customer.dto';
 
 @Injectable()
 export class CustomersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createCustomerDto: CreateCustomerDto) {
-    // Generate a customer ID if not provided
-    const count = await this.prisma.customer.count();
-    const customerCode = `CUST-${count + 1}`;
-
-    return this.prisma.customer.create({
-      data: {
-        customerCode,
-        firstName: createCustomerDto.firstName,
-        lastName: createCustomerDto.lastName,
-        email: createCustomerDto.email,
-        phone: createCustomerDto.phone,
-      },
-    });
-  }
-
+ 
   async findAll(params: { page?: number; limit?: number; search?: string }) {
     const { page, limit, search } = params;
-    const { skip, take } = getPagination(page, limit, 0); // initial dummy call
+    const { skip, take } = getPagination(page, limit, 0); 
 
     const where: Prisma.CustomerWhereInput = search
       ? {
           OR: [
-            { firstName: { contains: search, mode: 'insensitive' } },
-            { lastName: { contains: search, mode: 'insensitive' } },
-            { email: { contains: search, mode: 'insensitive' } },
-            { phone: { contains: search, mode: 'insensitive' } },
-            { customerCode: { contains: search, mode: 'insensitive' } },
+            { firstName: { startsWith: search, mode: 'insensitive' } },
+            { lastName: { startsWith: search, mode: 'insensitive' } },
+            { email: { startsWith: search, mode: 'insensitive' } },
+            { phone: { startsWith: search, mode: 'insensitive' } },
+            { customerCode: { startsWith: search, mode: 'insensitive' } },
           ],
         }
       : {};
@@ -63,7 +48,7 @@ export class CustomersService {
         (sum, order) => sum + Number(order.amount),
         0,
       );
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
       const { orders, ...rest } = customer;
       return { ...rest, totalSpent };
     });
@@ -80,6 +65,7 @@ export class CustomersService {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
       include: {
+        addresses: true,
         orders: {
           orderBy: { createdAt: 'desc' },
           include: { service: true, technician: true },
@@ -99,11 +85,213 @@ export class CustomersService {
     return { ...customer, totalSpent };
   }
 
+  async findByUserId(userId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId },
+      include: { addresses: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return customer;
+  }
+
   async update(id: string, updateCustomerDto: UpdateCustomerDto) {
-    await this.findOne(id); // Ensure exists
-    return this.prisma.customer.update({
+    const existing = await this.prisma.customer.findUnique({
       where: { id },
-      data: updateCustomerDto,
+      select: { id: true, userId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.updateCustomerRecord(
+      existing.id,
+      existing.userId ?? null,
+      updateCustomerDto,
+    );
+  }
+
+  async updateByUserId(userId: string, updateCustomerDto: UpdateCustomerDto) {
+    const existing = await this.prisma.customer.findUnique({
+      where: { userId },
+      select: { id: true, userId: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return this.updateCustomerRecord(
+      existing.id,
+      existing.userId ?? null,
+      updateCustomerDto,
+    );
+  }
+
+  // Address CRUD helpers
+  async listAddresses(customerId: string) {
+    await this.ensureCustomerExists(customerId);
+
+    return this.prisma.address.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createAddress(customerId: string, dto: CustomerAddressDto) {
+    await this.ensureCustomerExists(customerId);
+
+    return this.prisma.address.create({
+      data: {
+        ...dto,
+        customerId,
+      },
+    });
+  }
+
+  async updateAddress(
+    customerId: string,
+    addressId: string,
+    dto: CustomerAddressDto,
+  ) {
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, customerId },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Address not found for this customer');
+    }
+
+    return this.prisma.address.update({
+      where: { id: addressId },
+      data: dto,
+    });
+  }
+
+  async deleteAddress(customerId: string, addressId: string) {
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, customerId },
+      select: { id: true },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Address not found for this customer');
+    }
+
+    await this.prisma.address.delete({
+      where: { id: addressId },
+    });
+
+    return { success: true };
+  }
+
+  async listAddressesByUserId(userId: string) {
+    const customerId = await this.getCustomerIdByUserId(userId);
+    return this.prisma.address.findMany({
+      where: { customerId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createAddressByUserId(userId: string, dto: CustomerAddressDto) {
+    const customerId = await this.getCustomerIdByUserId(userId);
+    return this.prisma.address.create({
+      data: {
+        ...dto,
+        customerId,
+      },
+    });
+  }
+
+  async updateAddressByUserId(
+    userId: string,
+    addressId: string,
+    dto: CustomerAddressDto,
+  ) {
+    const customerId = await this.getCustomerIdByUserId(userId);
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, customerId },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Address not found for this customer');
+    }
+
+    return this.prisma.address.update({
+      where: { id: addressId },
+      data: dto,
+    });
+  }
+
+  async deleteAddressByUserId(userId: string, addressId: string) {
+    const customerId = await this.getCustomerIdByUserId(userId);
+    const address = await this.prisma.address.findFirst({
+      where: { id: addressId, customerId },
+      select: { id: true },
+    });
+
+    if (!address) {
+      throw new NotFoundException('Address not found for this customer');
+    }
+
+    await this.prisma.address.delete({
+      where: { id: addressId },
+    });
+
+    return { success: true };
+  }
+
+  private async ensureCustomerExists(customerId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+  }
+
+  private async getCustomerIdByUserId(userId: string) {
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    return customer.id;
+  }
+
+  private async updateCustomerRecord(
+    customerId: string,
+    userId: string | null,
+    updateCustomerDto: UpdateCustomerDto,
+  ) {
+    const { email, ...customerData } = updateCustomerDto;
+
+    return this.prisma.$transaction(async (tx) => {
+      if (email && userId) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { email },
+        });
+      }
+
+      return tx.customer.update({
+        where: { id: customerId },
+        data: {
+          ...customerData,
+          ...(email ? { email } : {}),
+        },
+        include: { addresses: true },
+      });
     });
   }
 }

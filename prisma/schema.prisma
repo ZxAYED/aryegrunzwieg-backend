@@ -135,7 +135,7 @@ model Customer {
   user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   profileImage String?      
-  customerCode String         @unique // e.g. cust-1
+  customerCode String         @unique 
   firstName    String
   lastName     String
   email        String         @unique
