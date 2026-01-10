@@ -24,7 +24,7 @@ import {
 } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 
-import { User } from '@prisma/client';
+import { Role, User } from '@prisma/client';
 import { Roles } from '../common/decorator/rolesDecorator';
 import {
   CreateCustomerAddressDto,
@@ -41,7 +41,7 @@ export class CustomersController {
   @Get('me')
   @ApiOperation({ summary: 'Get current customer profile' })
   @ApiBearerAuth('bearer')
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   me(@Req() req: { user?: User }) {
     const userId = this.getUserId(req);
     return this.customersService.findByUserId(userId);
@@ -68,7 +68,7 @@ export class CustomersController {
     },
   })
   @UseInterceptors(FileInterceptor('image'))
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   updateMe(
     @Req() req: { user?: User },
     @Body() updateCustomerDto: UpdateCustomerDto,
@@ -85,7 +85,7 @@ export class CustomersController {
   @Get('me/addresses')
   @ApiOperation({ summary: 'List current customer addresses' })
   @ApiBearerAuth('bearer')
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   listMyAddresses(@Req() req: { user?: User }) {
     const userId = this.getUserId(req);
     return this.customersService.listAddressesByUserId(userId);
@@ -95,7 +95,7 @@ export class CustomersController {
   @ApiOperation({ summary: 'Add a new address for current customer' })
   @ApiBearerAuth('bearer')
   @ApiBody({ type: CreateCustomerAddressDto })
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   createMyAddress(
     @Req() req: { user?: User },
     @Body() dto: CreateCustomerAddressDto,
@@ -116,7 +116,7 @@ export class CustomersController {
     description: 'Address ID',
   })
   @ApiBody({ type: UpdateCustomerAddressDto })
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   updateMyAddress(
     @Req() req: { user?: User },
     @Param('addressId') addressId: string,
@@ -134,7 +134,7 @@ export class CustomersController {
     type: String,
     description: 'Address ID',
   })
-  @Roles('CUSTOMER')
+  @Roles(Role.CUSTOMER)
   deleteMyAddress(
     @Req() req: { user?: User },
     @Param('addressId') addressId: string,

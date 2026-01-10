@@ -1,24 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString, Min } from 'class-validator';
+import { IsNotEmpty, IsString, Matches } from 'class-validator';
 
 export class CreateSlotDto {
   @IsString()
   @IsNotEmpty()
-  @ApiProperty({ example: '22/04/2025' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'date must be in YYYY-MM-DD format',
+  })
+  @ApiProperty({ example: '2025-04-22' })
   date!: string;
 
   @IsString()
   @IsNotEmpty()
-  @ApiProperty({ example: '07:00 AM' })
+  @Matches(/^\d{2}:\d{2}$/, {
+    message: 'startTime must be in HH:mm format',
+  })
+  @ApiProperty({ example: '07:00' })
   startTime!: string;
 
   @IsString()
   @IsNotEmpty()
-  @ApiProperty({ example: '10:00 PM' })
+  @Matches(/^\d{2}:\d{2}$/, {
+    message: 'endTime must be in HH:mm format',
+  })
+  @ApiProperty({ example: '10:00' })
   endTime!: string;
-
-  @IsInt()
-  @Min(1)
-  @ApiProperty({ example: 40 })
-  durationMinutes!: number;
 }

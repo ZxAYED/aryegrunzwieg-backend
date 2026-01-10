@@ -7,52 +7,58 @@ import { SlotStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { sendResponse } from '../utils/sendResponse';
 import { CreateSlotDto } from './dto/create-slot.dto';
-import { UpdateSlotDto } from './dto/update-slot.dto';
 
 @Injectable()
 export class SlotsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createSlotDto: CreateSlotDto) {
-    const date = this.parseDateDmy(createSlotDto.date);
-    const startMinutes = this.parseTime12(createSlotDto.startTime);
-    const endMinutes = this.parseTime12(createSlotDto.endTime);
+    const date = this.parseDateYmd(createSlotDto.date);
+    const startMinutes = this.parseTime24(createSlotDto.startTime);
+    const endMinutes = this.parseTime24(createSlotDto.endTime);
 
     if (endMinutes <= startMinutes) {
       throw new BadRequestException('endTime must be after startTime');
     }
 
-    if (!Number.isInteger(createSlotDto.durationMinutes)) {
-      throw new BadRequestException('durationMinutes must be an integer');
-    }
+    const startTime = this.formatTime24(startMinutes);
+    const endTime = this.formatTime24(endMinutes);
 
-    if (createSlotDto.durationMinutes <= 0) {
-      throw new BadRequestException('durationMinutes must be positive');
-    }
-
-    const slots = this.buildSlots(
-      date,
-      startMinutes,
-      endMinutes,
-      createSlotDto.durationMinutes,
-    );
-
-    if (slots.length === 0) {
-      throw new BadRequestException('No slots to create with given duration');
-    }
-
-    await this.prisma.slot.createMany({
-      data: slots,
+    const existingSlots = await this.prisma.slot.findMany({
+      where: { date },
+      select: { id: true, startTime: true, endTime: true },
     });
 
-    return sendResponse('Slots created successfully', {
-      createdCount: slots.length,
+    for (const slot of existingSlots) {
+      const existingStart = this.parseTime24(slot.startTime);
+      const existingEnd = this.parseTime24(slot.endTime);
+
+      if (startMinutes === existingStart && endMinutes === existingEnd) {
+        throw new BadRequestException(
+          'Slot already exists for the same time range',
+        );
+      }
+
+      if (startMinutes < existingEnd && endMinutes > existingStart) {
+        throw new BadRequestException('Slot overlaps with an existing slot');
+      }
+    }
+
+    const created = await this.prisma.slot.create({
+      data: {
+        date,
+        startTime,
+        endTime,
+        status: SlotStatus.AVAILABLE,
+      },
     });
+
+    return sendResponse('Slot created successfully', created);
   }
 
   async findAll(params: { status?: SlotStatus; date?: string }) {
     const { status, date } = params;
-    const normalizedDate = date ? this.parseDateDmy(date) : undefined;
+    const normalizedDate = date ? this.parseDateYmd(date) : undefined;
 
     const slots = await this.prisma.slot.findMany({
       where: {
@@ -72,90 +78,60 @@ export class SlotsService {
     return sendResponse('Slot fetched successfully', slot);
   }
 
-  async update(id: string, updateSlotDto: UpdateSlotDto) {
-    await this.findOne(id);
-
-    const data: {
-      date?: Date;
-      startTime?: string;
-      endTime?: string;
-    } = {};
-
-    if (updateSlotDto.date) {
-      data.date = this.parseDateDmy(updateSlotDto.date);
-    }
-
-    if (updateSlotDto.startTime) {
-      const minutes = this.parseTime12(updateSlotDto.startTime);
-      data.startTime = this.formatTime24(minutes);
-    }
-
-    if (updateSlotDto.endTime) {
-      const minutes = this.parseTime12(updateSlotDto.endTime);
-      data.endTime = this.formatTime24(minutes);
-    }
-
-    const slot = await this.prisma.slot.update({
-      where: { id },
-      data,
-    });
-    return sendResponse('Slot updated successfully', slot);
-  }
-
   async updateStatus(id: string, status: SlotStatus) {
-    await this.findOne(id);
-    const slot = await this.prisma.slot.update({
+    const slot = await this.prisma.slot.findUnique({
+      where: { id },
+    });
+    if (!slot) throw new NotFoundException('Slot not found');
+
+    if (status !== SlotStatus.BOOKED && status !== SlotStatus.DISABLED) {
+      throw new BadRequestException('status must be BOOKED or DISABLED');
+    }
+
+    if (slot.status === SlotStatus.BOOKED && status === SlotStatus.DISABLED) {
+      throw new BadRequestException('Cannot disable a booked slot');
+    }
+
+    if (slot.status === SlotStatus.DISABLED && status === SlotStatus.BOOKED) {
+      throw new BadRequestException('Cannot book a disabled slot');
+    }
+
+    const updatedSlot = await this.prisma.slot.update({
       where: { id },
       data: { status },
     });
-    return sendResponse('Slot status updated successfully', slot);
+    return sendResponse('Slot status updated successfully', updatedSlot);
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-    const slot = await this.prisma.slot.delete({
+    const slot = await this.prisma.slot.findUnique({
+      where: { id },
+      include: { _count: { select: { orders: true } } },
+    });
+    if (!slot) throw new NotFoundException('Slot not found');
+
+    if (slot.status === SlotStatus.BOOKED) {
+      throw new BadRequestException('Cannot delete a booked slot');
+    }
+
+    if (slot._count.orders > 0) {
+      throw new BadRequestException('Cannot delete a slot with orders');
+    }
+
+    await this.prisma.slot.delete({
       where: { id },
     });
-    return sendResponse('Slot deleted successfully', slot);
+    return sendResponse('Slot deleted successfully', { id });
   }
 
-  private buildSlots(
-    date: Date,
-    startMinutes: number,
-    endMinutes: number,
-    durationMinutes: number,
-  ) {
-    const slots: {
-      date: Date;
-      startTime: string;
-      endTime: string;
-      status: SlotStatus;
-    }[] = [];
-
-    for (
-      let current = startMinutes;
-      current + durationMinutes <= endMinutes;
-      current += durationMinutes
-    ) {
-      slots.push({
-        date,
-        startTime: this.formatTime24(current),
-        endTime: this.formatTime24(current + durationMinutes),
-        status: SlotStatus.AVAILABLE,
-      });
-    }
-
-    return slots;
-  }
-
-  private parseDateDmy(value: string) {
-    const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  private parseDateYmd(value: string) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
     if (!match) {
-      throw new BadRequestException('date must be in DD/MM/YYYY format');
+      throw new BadRequestException('date must be in YYYY-MM-DD format');
     }
-    const day = Number(match[1]);
+    const year = Number(match[1]);
     const month = Number(match[2]);
-    const year = Number(match[3]);
+    const day = Number(match[3]);
 
     const date = new Date(Date.UTC(year, month - 1, day));
     if (
@@ -168,33 +144,23 @@ export class SlotsService {
     return date;
   }
 
-  private parseTime12(value: string) {
-    const match = /^(\d{1,2}):(\d{2})\s?(AM|PM)$/i.exec(value.trim());
+  private parseTime24(value: string) {
+    const match = /^(\d{2}):(\d{2})$/.exec(value.trim());
     if (!match) {
-      throw new BadRequestException(
-        'time must be in hh:mm AM/PM format',
-      );
+      throw new BadRequestException('time must be in HH:mm format');
     }
-    let hours = Number(match[1]);
+    const hours = Number(match[1]);
     const minutes = Number(match[2]);
-    const period = match[3].toUpperCase();
 
     if (
       !Number.isInteger(hours) ||
       !Number.isInteger(minutes) ||
-      hours < 1 ||
-      hours > 12 ||
+      hours < 0 ||
+      hours > 23 ||
       minutes < 0 ||
       minutes > 59
     ) {
-      throw new BadRequestException('time must be a valid 12-hour time');
-    }
-
-    if (hours === 12) {
-      hours = 0;
-    }
-    if (period === 'PM') {
-      hours += 12;
+      throw new BadRequestException('time must be a valid 24-hour time');
     }
 
     return hours * 60 + minutes;

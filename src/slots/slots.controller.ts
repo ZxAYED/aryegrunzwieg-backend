@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -13,17 +14,16 @@ import { SlotStatus } from '@prisma/client';
 import { Roles } from '../common/decorator/rolesDecorator';
 import { CreateSlotDto } from './dto/create-slot.dto';
 import { UpdateSlotStatusDto } from './dto/update-slot-status.dto';
-import { UpdateSlotDto } from './dto/update-slot.dto';
 import { SlotsService } from './slots.service';
 
 @ApiTags('Slots')
-@Roles('ADMIN')
 @Controller('slots')
 export class SlotsController {
   constructor(private readonly slotsService: SlotsService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create slots for a day' })
+  @ApiOperation({ summary: 'Create a slot' })
+  @Roles('ADMIN')
   create(@Body() createSlotDto: CreateSlotDto) {
     return this.slotsService.create(createSlotDto);
   }
@@ -32,6 +32,7 @@ export class SlotsController {
   @ApiOperation({ summary: 'Get all slots' })
   @ApiQuery({ name: 'status', required: false, enum: SlotStatus })
   @ApiQuery({ name: 'date', required: false })
+  @Roles('ADMIN', 'CUSTOMER', 'TECHNICIAN')
   findAll(@Query('status') status?: SlotStatus, @Query('date') date?: string) {
     return this.slotsService.findAll({
       status,
@@ -41,20 +42,16 @@ export class SlotsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a slot by ID' })
-  findOne(@Param('id') id: string) {
+  @Roles('ADMIN', 'CUSTOMER', 'TECHNICIAN')
+  findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.slotsService.findOne(id);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a slot' })
-  update(@Param('id') id: string, @Body() updateSlotDto: UpdateSlotDto) {
-    return this.slotsService.update(id, updateSlotDto);
-  }
-
-  @Patch(':id/status')
   @ApiOperation({ summary: 'Update slot status' })
+  @Roles('ADMIN')
   updateStatus(
-    @Param('id') id: string,
+    @Param('id', new ParseUUIDPipe()) id: string,
     @Body() updateSlotStatusDto: UpdateSlotStatusDto,
   ) {
     return this.slotsService.updateStatus(id, updateSlotStatusDto.status);
@@ -62,7 +59,8 @@ export class SlotsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a slot' })
-  remove(@Param('id') id: string) {
+  @Roles('ADMIN')
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.slotsService.remove(id);
   }
 }

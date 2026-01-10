@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { IsIn } from 'class-validator';
 import { SlotStatus } from '@prisma/client';
 
+const allowedStatuses = [SlotStatus.BOOKED, SlotStatus.DISABLED] as const;
+
 export class UpdateSlotStatusDto {
-  @IsEnum(SlotStatus)
-  @ApiProperty({ example: 'DISABLED', enum: SlotStatus })
-  status!: SlotStatus;
+  @IsIn(allowedStatuses)
+  @ApiProperty({ example: 'DISABLED', enum: allowedStatuses })
+  status!: (typeof allowedStatuses)[number];
 }

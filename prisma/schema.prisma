@@ -205,7 +205,6 @@ profileImage String?
   isVerified    Boolean          @default(false)
 
   // Denormalized stats for fast dashboards
-  ratingAvg     Float            @default(0.0)
   ratingCount   Int              @default(0)
   jobsAssigned  Int              @default(0)
   jobsCompleted Int              @default(0)
@@ -271,7 +270,6 @@ model Service {
   // Quick stats (optional)
   assignedJobs  Int   @default(0)
   completedJobs Int   @default(0)
-  ratingAvg     Float @default(0.0)
   ratingCount   Int   @default(0)
 
   createdAt    DateTime      @default(now())
