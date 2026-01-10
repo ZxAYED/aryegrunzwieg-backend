@@ -160,8 +160,7 @@ model Address {
   customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   label       AddressLabel @default(HOME)
-  nickname    String?
-  contactName String?
+
 
   addressLine String
   apartment   String?
@@ -169,8 +168,7 @@ model Address {
   state       String
   zip         String
 
-  lat         Float?
-  lng         Float?
+  
 
   notesForTechnician String?
 

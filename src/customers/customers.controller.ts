@@ -9,23 +9,31 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { CustomersService } from './customers.service';
 
-import { UpdateCustomerDto } from './dto/update-customer.dto';
-import { Roles } from '../common/decorator/rolesDecorator';
-import { CustomerAddressDto } from './dto/create-customer.dto';
 import { User } from '@prisma/client';
+import { Roles } from '../common/decorator/rolesDecorator';
+import {
+  CreateCustomerAddressDto,
+  UpdateCustomerAddressDto,
+} from './dto/customer-address.dto';
+import { UpdateCustomerDto } from './dto/update-customer.dto';
 
 @ApiBearerAuth('bearer')
 @ApiTags('Customers')
-@Roles('ADMIN', 'STAFF')
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
@@ -42,13 +50,36 @@ export class CustomersController {
   @Patch('me')
   @ApiOperation({ summary: 'Update current customer profile' })
   @ApiBearerAuth('bearer')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        image: { type: 'string', format: 'binary' },
+        firstName: { type: 'string' },
+        lastName: { type: 'string' },
+        phone: { type: 'string' },
+        addressLine: { type: 'string' },
+        apartment: { type: 'string' },
+        city: { type: 'string' },
+        state: { type: 'string' },
+        zip: { type: 'string' },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('image'))
   @Roles('CUSTOMER')
   updateMe(
     @Req() req: { user?: User },
     @Body() updateCustomerDto: UpdateCustomerDto,
+    @UploadedFile() image?: UploadedImageFile,
   ) {
     const userId = this.getUserId(req);
-    return this.customersService.updateByUserId(userId, updateCustomerDto);
+    return this.customersService.updateByUserId(
+      userId,
+      updateCustomerDto,
+      image,
+    );
   }
 
   @Get('me/addresses')
@@ -63,35 +94,46 @@ export class CustomersController {
   @Post('me/addresses')
   @ApiOperation({ summary: 'Add a new address for current customer' })
   @ApiBearerAuth('bearer')
+  @ApiBody({ type: CreateCustomerAddressDto })
   @Roles('CUSTOMER')
   createMyAddress(
     @Req() req: { user?: User },
-    @Body() dto: CustomerAddressDto,
+    @Body() dto: CreateCustomerAddressDto,
   ) {
     const userId = this.getUserId(req);
     return this.customersService.createAddressByUserId(userId, dto);
   }
 
   @Patch('me/addresses/:addressId')
-  @ApiOperation({ summary: 'Update a specific address for current customer' })
+  @ApiOperation({
+    summary:
+      'Update a specific address for current customer , isDefault means set this address as default for customer',
+  })
   @ApiBearerAuth('bearer')
+  @ApiParam({
+    name: 'addressId',
+    type: String,
+    description: 'Address ID',
+  })
+  @ApiBody({ type: UpdateCustomerAddressDto })
   @Roles('CUSTOMER')
   updateMyAddress(
     @Req() req: { user?: User },
     @Param('addressId') addressId: string,
-    @Body() dto: CustomerAddressDto,
+    @Body() dto: UpdateCustomerAddressDto,
   ) {
     const userId = this.getUserId(req);
-    return this.customersService.updateAddressByUserId(
-      userId,
-      addressId,
-      dto,
-    );
+    return this.customersService.updateAddressByUserId(userId, addressId, dto);
   }
 
   @Delete('me/addresses/:addressId')
   @ApiOperation({ summary: 'Delete a specific address for current customer' })
   @ApiBearerAuth('bearer')
+  @ApiParam({
+    name: 'addressId',
+    type: String,
+    description: 'Address ID',
+  })
   @Roles('CUSTOMER')
   deleteMyAddress(
     @Req() req: { user?: User },
@@ -107,69 +149,13 @@ export class CustomersController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
   @ApiBearerAuth('bearer')
+  @Roles('ADMIN')
   findAll(
     @Query('page') page?: number,
     @Query('limit') limit?: number,
     @Query('search') search?: string,
   ) {
     return this.customersService.findAll({ page, limit, search });
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a customer by ID' })
-  @ApiBearerAuth('bearer')
-  findOne(@Param('id') id: string) {
-    return this.customersService.findOne(id);
-  }
-
-  @Patch(':id')
-  @ApiOperation({ summary: 'Update a customer' })
-  @ApiBearerAuth('bearer')
-  update(
-    @Param('id') id: string,
-    @Body() updateCustomerDto: UpdateCustomerDto,
-  ) {
-    return this.customersService.update(id, updateCustomerDto);
-  }
-
-  // Address CRUD
-
-  @Get(':id/addresses')
-  @ApiOperation({ summary: 'List customer addresses' })
-  @ApiBearerAuth('bearer')
-  listAddresses(@Param('id') customerId: string) {
-    return this.customersService.listAddresses(customerId);
-  }
-
-  @Post(':id/addresses')
-  @ApiOperation({ summary: 'Add a new address for customer' })
-  @ApiBearerAuth('bearer')
-  createAddress(
-    @Param('id') customerId: string,
-    @Body() dto: CustomerAddressDto,
-  ) {
-    return this.customersService.createAddress(customerId, dto);
-  }
-
-  @Patch(':id/addresses/:addressId')
-  @ApiOperation({ summary: 'Update a specific customer address' })
-  @ApiBearerAuth('bearer')
-  updateAddress(
-    @Param('id') customerId: string,
-    @Param('addressId') addressId: string,
-    @Body() dto: CustomerAddressDto,
-  ) {
-    return this.customersService.updateAddress(customerId, addressId, dto);
-  }
-
-  @Delete(':id/addresses/:addressId')
-  @ApiOperation({ summary: 'Delete a specific customer address' })
-  @ApiBearerAuth('bearer')
-  deleteAddress(
-    @Param('id') customerId: string,
-    @Param('addressId') addressId: string,
-  ) {
-    return this.customersService.deleteAddress(customerId, addressId);
   }
 
   private getUserId(req: { user?: User }) {
@@ -180,3 +166,9 @@ export class CustomersController {
     return req.user.id;
   }
 }
+
+type UploadedImageFile = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype?: string;
+};
