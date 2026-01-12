@@ -1,0 +1,92 @@
+model User {
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  passwordHash          String
+  role                  Role      @default(CUSTOMER)
+  refreshTokenHash      String?   @unique
+  refreshTokenExpiresAt DateTime?
+
+  isVerified Boolean @default(false)
+  isBlocked  Boolean @default(false)
+  isDeleted  Boolean @default(false)
+
+  // OTP fields
+  registrationOtp         String?
+  registrationOtpExpireIn DateTime?
+  registrationOtpAttempts Int       @default(0)
+
+  resetOtp         String?
+  resetOtpExpireIn DateTime?
+  resetOtpAttempts Int       @default(0)
+
+  // Profile links
+  customer   Customer?
+  technician Technician?
+
+  // Orders for confirmation/rejection/cancellation
+  confirmedOrders Order[] @relation("OrderConfirmedBy")
+  rejectedOrders  Order[] @relation("OrderRejectedBy")
+  cancelledOrders Order[] @relation("OrderCancelledBy")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([isDeleted])
+  @@index([isBlocked])
+}
+
+model Customer {
+  id     String  @id @default(uuid())
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  profileImage String?
+  customerCode String         @unique
+  firstName    String
+  lastName     String
+  email        String         @unique
+  phone        String?
+  status       CustomerStatus @default(ACTIVE)
+
+  joinedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  addresses Address[]
+  orders    Order[]
+  equipment Equipment2[]
+
+  @@index([status])
+  @@index([joinedAt])
+}
+
+model Address {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  label AddressLabel @default(HOME)
+
+  addressLine String
+  apartment   String?
+  city        String
+  state       String
+  zip         String
+
+  notesForTechnician String?
+
+  isDefault Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+  equipment Equipment2[]
+
+  @@index([customerId])
+  @@index([isDefault])
+  @@index([city])
+  @@index([state])
+  @@index([zip])
+}

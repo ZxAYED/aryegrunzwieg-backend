@@ -32,7 +32,7 @@ async function bootstrap() {
   }
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Nest Postgres Template')
+    .setTitle('AryeGrunzWeig Backend Server')
     .setVersion('1.0.0')
     .addBearerAuth(
       {

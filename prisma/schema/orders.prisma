@@ -1,0 +1,112 @@
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique // e.g., ORD-1284
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+
+  technicianId String?
+  technician   Technician? @relation(fields: [technicianId], references: [id], onDelete: SetNull)
+
+  addressId String?
+  address   Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  // Booking schedule
+  preferredDate DateTime?
+  slotId        String?
+  slot          Slot?     @relation(fields: [slotId], references: [id], onDelete: SetNull)
+
+  urgency Urgency     @default(NORMAL)
+  status  OrderStatus @default(PENDING_CONFIRMATION)
+
+  amount Decimal @db.Decimal(10, 2)
+
+  selectedIssues String[] // ["Not cooling","Strange noise"]
+
+  notes String?
+
+  confirmedAt       DateTime?
+  confirmedByUserId String?
+  confirmedBy       User?     @relation("OrderConfirmedBy", fields: [confirmedByUserId], references: [id], onDelete: SetNull)
+
+  rejectedAt       DateTime?
+  rejectedByUserId String?
+  rejectedBy       User?     @relation("OrderRejectedBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+  rejectionReason  String?
+
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancelledBy        User?     @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+  cancellationReason String?
+
+  prevEquipmentId String?
+  prevEquipment   Equipment2? @relation("OrderPrevEquipment", fields: [prevEquipmentId], references: [id], onDelete: SetNull)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  review           TechnicianReview?
+  currentEquipment OrderEquipmentSnapshot?
+
+  media        OrderMedia[]
+  transactions Transaction[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([technicianId])
+  @@index([serviceId])
+  @@index([addressId])
+  @@index([slotId])
+  @@index([preferredDate])
+  @@index([prevEquipmentId])
+  @@index([createdAt])
+}
+
+model OrderEquipmentSnapshot {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  manufacturer String?
+  modelNumber  String?
+  serialNumber String?
+  systemType   SystemType?
+
+  floors OrderEquipmentFloorInlet[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderMedia {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  type MediaType
+
+  bucket    String
+  objectKey String
+  fileName  String?
+  publicUrl String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([bucket, objectKey])
+}
+
+model OrderEquipmentFloorInlet {
+  id         String                 @id @default(uuid())
+  snapshotId String
+  snapshot   OrderEquipmentSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  floorName  String
+  inletCount Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([snapshotId])
+}

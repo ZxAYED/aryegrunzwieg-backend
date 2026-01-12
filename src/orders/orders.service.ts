@@ -124,7 +124,7 @@ export class OrdersService {
         customer: true,
         service: true,
         technician: true,
-        equipment: {
+        currentEquipment: {
           include: { floors: true },
         },
         media: true,

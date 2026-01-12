@@ -1,0 +1,20 @@
+model Transaction {
+  id    String @id @default(uuid())
+  txnId String @unique // TXN-1284
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  amount      Decimal @db.Decimal(10, 2)
+  techPayout  Decimal @db.Decimal(10, 2)
+  platformFee Decimal @db.Decimal(10, 2)
+
+  status TransactionStatus @default(PENDING)
+  date   DateTime          @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([status])
+}

@@ -25,7 +25,7 @@ export async function seedDefaults(prisma: PrismaClient) {
   }
 
   const customerEmail = 'customer@gmail.com';
-  
+
   let customerUser = await prisma.user.findUnique({
     where: { email: customerEmail },
   });
@@ -52,7 +52,7 @@ export async function seedDefaults(prisma: PrismaClient) {
         firstName: 'Customer',
         lastName: 'User',
         email: customerEmail,
-        
+
         status: CustomerStatus.ACTIVE,
       },
     });

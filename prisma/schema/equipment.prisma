@@ -1,0 +1,23 @@
+model Equipment2 {
+  id String @id @default(uuid())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  addressId String?
+  address   Address? @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  manufacturer String?
+  modelNumber  String?
+  serialNumber String?
+  systemType   SystemType @default(REGULAR)
+
+  orders Order[] @relation("OrderPrevEquipment")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([addressId])
+  @@index([serialNumber])
+}

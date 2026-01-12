@@ -8,6 +8,7 @@ import { Prisma, Role, TechnicianStatus } from '@prisma/client';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTechnicianDto } from './dto/create-technician.dto';
+import { CreateSpecializationDto } from './dto/create-specialization.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
 import * as bcrypt from 'bcrypt';
 
@@ -15,14 +16,67 @@ import * as bcrypt from 'bcrypt';
 export class TechniciansService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async createSpecialization(dto: CreateSpecializationDto) {
+    const name = this.normalizeText(dto.name, 'name');
+    const existing = await this.prisma.specialization.findFirst({
+      where: { name: { equals: name, mode: Prisma.QueryMode.insensitive } },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException('Specialization already exists');
+    }
+
+    return this.prisma.specialization.create({
+      data: { name },
+    });
+  }
+
+  async listSpecializations(search?: string) {
+    const trimmed = search?.trim();
+    return this.prisma.specialization.findMany({
+      where: trimmed
+        ? { name: { contains: trimmed, mode: Prisma.QueryMode.insensitive } }
+        : {},
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getSpecialization(id: string) {
+    const specialization = await this.prisma.specialization.findUnique({
+      where: { id },
+    });
+    if (!specialization) {
+      throw new NotFoundException('Specialization not found');
+    }
+    return specialization;
+  }
+
+  async deleteSpecialization(id: string) {
+    const specialization = await this.prisma.specialization.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!specialization) {
+      throw new NotFoundException('Specialization not found');
+    }
+
+    await this.prisma.specialization.delete({
+      where: { id },
+    });
+
+    return { success: true, id };
+  }
+
   async create(createTechnicianDto: CreateTechnicianDto) {
     const name = this.normalizeText(createTechnicianDto.name, 'name');
     const email = this.normalizeEmail(createTechnicianDto.email);
     const phone = createTechnicianDto.phone?.trim();
     const status = createTechnicianDto.status ?? TechnicianStatus.OFFLINE;
-    const specializations = this.normalizeSpecializations(
-      createTechnicianDto.specializations,
+    const specializationIds = this.normalizeSpecializationIds(
+      createTechnicianDto.specializationIds,
     );
+    await this.ensureSpecializationsExist(specializationIds);
 
     const existingUser = await this.prisma.user.findFirst({
       where: { email: { equals: email, mode: Prisma.QueryMode.insensitive } },
@@ -56,7 +110,7 @@ export class TechniciansService {
         select: { id: true },
       });
 
-      return tx.technician.create({
+      const technician = await tx.technician.create({
         data: {
           userId: user.id,
           name,
@@ -64,15 +118,12 @@ export class TechniciansService {
           phone,
           status,
           isVerified: true,
-          ...(specializations.length
+          ...(specializationIds.length
             ? {
                 specializations: {
-                  create: specializations.map((spec) => ({
+                  create: specializationIds.map((id) => ({
                     specialization: {
-                      connectOrCreate: {
-                        where: { name: spec },
-                        create: { name: spec },
-                      },
+                      connect: { id },
                     },
                   })),
                 },
@@ -85,6 +136,8 @@ export class TechniciansService {
           },
         },
       });
+
+      return this.flattenTechnician(technician);
     });
   }
 
@@ -139,7 +192,7 @@ export class TechniciansService {
     const pagination = getPagination(page, limit, totalItems);
 
     return {
-      data,
+      data: data.map((technician) => this.flattenTechnician(technician)),
       meta: pagination.meta,
     };
   }
@@ -162,7 +215,7 @@ export class TechniciansService {
       throw new NotFoundException('Technician not found');
     }
 
-    return technician;
+    return this.flattenTechnician(technician);
   }
 
   async update(id: string, updateTechnicianDto: UpdateTechnicianDto) {
@@ -213,9 +266,12 @@ export class TechniciansService {
       data.isVerified = updateTechnicianDto.isVerified;
     }
 
-    const specializations = this.normalizeSpecializations(
-      updateTechnicianDto.specializations,
+    const specializationIds = this.normalizeSpecializationIds(
+      updateTechnicianDto.specializationIds,
     );
+    if (updateTechnicianDto.specializationIds) {
+      await this.ensureSpecializationsExist(specializationIds);
+    }
 
     return this.prisma.$transaction(async (tx) => {
       if (data.email && existing.userId) {
@@ -246,22 +302,19 @@ export class TechniciansService {
         });
       }
 
-      return tx.technician.update({
+      const technician = await tx.technician.update({
         where: { id },
         data: {
           ...data,
-          ...(updateTechnicianDto.specializations
+          ...(updateTechnicianDto.specializationIds
             ? {
                 specializations: {
                   deleteMany: {},
-                  ...(specializations.length
+                  ...(specializationIds.length
                     ? {
-                        create: specializations.map((spec) => ({
+                        create: specializationIds.map((id) => ({
                           specialization: {
-                            connectOrCreate: {
-                              where: { name: spec },
-                              create: { name: spec },
-                            },
+                            connect: { id },
                           },
                         })),
                       }
@@ -276,6 +329,8 @@ export class TechniciansService {
           },
         },
       });
+
+      return this.flattenTechnician(technician);
     });
   }
 
@@ -320,14 +375,14 @@ export class TechniciansService {
     return normalized;
   }
 
-  private normalizeSpecializations(value?: string[]) {
+  private normalizeSpecializationIds(value?: string[]) {
     if (!value) {
       return [];
     }
 
     if (!Array.isArray(value)) {
       throw new BadRequestException(
-        'specializations must be an array of strings',
+        'specializationIds must be an array of strings',
       );
     }
 
@@ -350,5 +405,29 @@ export class TechniciansService {
     }
 
     return result;
+  }
+
+  private flattenTechnician(technician: {
+    specializations?: { specialization: { id: string; name: string } }[];
+  }) {
+    const { specializations, ...rest } = technician;
+    return {
+      ...rest,
+      specializations: specializations?.map((item) => item.specialization) ?? [],
+    };
+  }
+
+  private async ensureSpecializationsExist(ids: string[]) {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const existing = await this.prisma.specialization.count({
+      where: { id: { in: ids } },
+    });
+
+    if (existing !== ids.length) {
+      throw new BadRequestException('Invalid specializationIds');
+    }
   }
 }

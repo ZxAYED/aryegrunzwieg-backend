@@ -1,0 +1,23 @@
+model Service {
+  id        String        @id @default(uuid())
+  name      String
+  category  String
+  basePrice Decimal       @db.Decimal(10, 2)
+  status    ServiceStatus @default(ACTIVE)
+
+  commonIssues String[]
+
+  assignedJobs  Int      @default(0)
+  completedJobs Int      @default(0)
+  ratingAvg     Float    @default(0.0)
+  ratingCount   Int      @default(0)
+  totalRatings  Decimal  @default(0.00) @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([status])
+  @@index([category])
+  @@index([name])
+}

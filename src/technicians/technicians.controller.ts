@@ -15,11 +15,42 @@ import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
 import { Roles } from '../common/decorator/rolesDecorator';
 import { Role, TechnicianStatus } from '@prisma/client';
+import { CreateSpecializationDto } from './dto/create-specialization.dto';
 
 @ApiTags('Technicians')
 @Controller('technicians')
 export class TechniciansController {
   constructor(private readonly techniciansService: TechniciansService) {}
+
+  @Post('specializations')
+  @ApiOperation({ summary: 'Create a specialization' })
+  @ApiBody({ type: CreateSpecializationDto })
+  @Roles(Role.ADMIN)
+  createSpecialization(@Body() dto: CreateSpecializationDto) {
+    return this.techniciansService.createSpecialization(dto);
+  }
+
+  @Get('specializations')
+  @ApiOperation({ summary: 'List specializations' })
+  @ApiQuery({ name: 'search', required: false })
+  @Roles(Role.ADMIN)
+  listSpecializations(@Query('search') search?: string) {
+    return this.techniciansService.listSpecializations(search);
+  }
+
+  @Get('specializations/:id')
+  @ApiOperation({ summary: 'Get a specialization by ID' })
+  @Roles(Role.ADMIN)
+  getSpecialization(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.techniciansService.getSpecialization(id);
+  }
+
+  @Delete('specializations/:id')
+  @ApiOperation({ summary: 'Delete a specialization' })
+  @Roles(Role.ADMIN)
+  deleteSpecialization(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.techniciansService.deleteSpecialization(id);
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new technician' })

@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   MinLength,
 } from 'class-validator';
 import { TechnicianStatus } from '@prisma/client';
@@ -37,8 +38,10 @@ export class CreateTechnicianDto {
   status?: TechnicianStatus;
 
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   @IsOptional()
-  @ApiPropertyOptional({ example: ['AC Repair', 'HVAC'] })
-  specializations?: string[];
+  @ApiPropertyOptional({
+    example: ['de2644a4-5de9-4140-806a-dc51f9324fd1'],
+  })
+  specializationIds?: string[];
 }

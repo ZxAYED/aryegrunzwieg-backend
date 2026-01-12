@@ -1,0 +1,62 @@
+model Technician {
+  id     String  @id @default(uuid())
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  profileImage String?
+  name         String
+  email        String  @unique
+  phone        String?
+
+  status     TechnicianStatus @default(OFFLINE)
+  isVerified Boolean          @default(false)
+
+  ratingAvg Float @default(0.0)
+
+  ratingCount   Int @default(0)
+  jobsAssigned  Int @default(0)
+  jobsCompleted Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders          Order[]
+  specializations TechnicianSpecialization[]
+  reviews         TechnicianReview[]
+
+  @@index([status])
+  @@index([isVerified])
+}
+
+model TechnicianSpecialization {
+  technicianId     String
+  specializationId String
+
+  technician     Technician     @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  specialization Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([technicianId, specializationId])
+  @@index([specializationId])
+}
+
+model Specialization {
+  id          String                     @id @default(uuid())
+  name        String                     @unique
+  technicians TechnicianSpecialization[]
+}
+
+model TechnicianReview {
+  id      String @id @default(uuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  technicianId String
+  technician   Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+
+  rating  Int
+  comment String?
+
+  createdAt DateTime @default(now())
+
+  @@index([technicianId])
+}

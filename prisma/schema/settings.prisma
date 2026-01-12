@@ -1,0 +1,33 @@
+model SettingsContent {
+  id        String       @id @default(uuid())
+  type      SettingsType @unique
+  content   String       @db.Text
+  updatedAt DateTime     @updatedAt
+}
+
+model Faq {
+  id        String  @id @default(uuid())
+  question  String
+  answer    String
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model NotificationTemplate {
+  id    String @id @default(uuid())
+  title String
+  body  String
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+}

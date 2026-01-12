@@ -1,0 +1,75 @@
+enum Role {
+  CUSTOMER
+  TECHNICIAN
+  ADMIN
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum TechnicianStatus {
+  AVAILABLE
+  ON_JOB
+  OFFLINE
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OrderStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  REJECTED
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Urgency {
+  NORMAL
+  URGENT
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum MediaType {
+  PHOTO
+  VIDEO
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  OTHER
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  DISABLED
+}
+
+enum SystemType {
+  REGULAR
+  SPLIT
+  COMMERCIAL
+  OTHER
+}
+
+enum SettingsType {
+  TERMS
+  PRIVACY
+  ACCEPTANCE
+  CONTACT
+}
