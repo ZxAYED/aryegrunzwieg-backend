@@ -35,7 +35,7 @@ export class AuthGuard extends PassportAuthGuard('jwt') {
       .getRequest<{ user?: { role?: string } }>();
     const user = request.user;
     if (!user) {
-      throw new UnauthorizedException('Unauthorized');
+      throw new UnauthorizedException('Unauthorized, Please login first');
     }
 
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(

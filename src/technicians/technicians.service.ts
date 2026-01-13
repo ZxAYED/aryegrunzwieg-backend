@@ -5,12 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, Role, TechnicianStatus } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { CreateSpecializationDto } from './dto/create-specialization.dto';
+import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
-import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class TechniciansService {
@@ -94,10 +94,7 @@ export class TechniciansService {
       throw new ConflictException('Technician already exists');
     }
 
-    const passwordHash = await bcrypt.hash(
-      createTechnicianDto.password,
-      12,
-    );
+    const passwordHash = await bcrypt.hash(createTechnicianDto.password, 12);
 
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -292,10 +289,7 @@ export class TechniciansService {
         });
       }
 
-      if (
-        updateTechnicianDto.isVerified !== undefined &&
-        existing.userId
-      ) {
+      if (updateTechnicianDto.isVerified !== undefined && existing.userId) {
         await tx.user.update({
           where: { id: existing.userId },
           data: { isVerified: updateTechnicianDto.isVerified },
@@ -413,7 +407,8 @@ export class TechniciansService {
     const { specializations, ...rest } = technician;
     return {
       ...rest,
-      specializations: specializations?.map((item) => item.specialization) ?? [],
+      specializations:
+        specializations?.map((item) => item.specialization) ?? [],
     };
   }
 

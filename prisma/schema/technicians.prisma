@@ -43,6 +43,8 @@ model Specialization {
   id          String                     @id @default(uuid())
   name        String                     @unique
   technicians TechnicianSpecialization[]
+  services    ServiceSpecialization[]
+  primaryServices Service[] @relation("PrimaryServiceSpecialization")
 }
 
 model TechnicianReview {

@@ -1,5 +1,6 @@
 import {
   CustomerStatus,
+  Prisma,
   PrismaClient,
   Role,
   TechnicianStatus,
@@ -61,6 +62,20 @@ export async function seedDefaults(prisma: PrismaClient) {
 
   const technicianEmail = 'technician@gmail.com';
   const technicianPassword = await bcrypt.hash('123456', 10);
+  const specializationName = 'AC Repair';
+
+  let specialization = await prisma.specialization.findFirst({
+    where: {
+      name: { equals: specializationName, mode: Prisma.QueryMode.insensitive },
+    },
+  });
+  if (!specialization) {
+    specialization = await prisma.specialization.create({
+      data: { name: specializationName },
+    });
+    console.log('Created Specialization:', specialization.name);
+  }
+
   let technicianUser = await prisma.user.findUnique({
     where: { email: technicianEmail },
   });
@@ -88,9 +103,35 @@ export async function seedDefaults(prisma: PrismaClient) {
         phone: '+1 (555) 123-4567',
         status: TechnicianStatus.AVAILABLE,
         isVerified: true,
+        specializations: {
+          create: [
+            {
+              specialization: {
+                connect: { id: specialization.id },
+              },
+            },
+          ],
+        },
       },
     });
     console.log('Created Technician:', created.email);
+  } else {
+    const existingLink = await prisma.technicianSpecialization.findFirst({
+      where: {
+        technicianId: technicianProfile.id,
+        specializationId: specialization.id,
+      },
+      select: { technicianId: true },
+    });
+    if (!existingLink) {
+      await prisma.technicianSpecialization.create({
+        data: {
+          technicianId: technicianProfile.id,
+          specializationId: specialization.id,
+        },
+      });
+      console.log('Linked Technician Specialization:', specialization.name);
+    }
   }
 
   console.log('Seeding completed.');

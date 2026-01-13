@@ -20,10 +20,23 @@ export class ServicesService {
     const basePrice = this.normalizeBasePrice(createServiceDto.basePrice);
     const commonIssues = this.normalizeIssues(createServiceDto.commonIssues);
     const status = createServiceDto.status ?? ServiceStatus.ACTIVE;
+    const specializationId = this.normalizeOptionalId(
+      createServiceDto.specializationId,
+      'specializationId',
+    );
+    const specializationIds = this.normalizeSpecializationIds(
+      createServiceDto.specializationIds,
+    );
 
     if (commonIssues.length === 0) {
       throw new BadRequestException('commonIssues must not be empty');
     }
+
+    await this.ensureSpecializationsExist(
+      [specializationId, ...specializationIds].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
 
     const duplicate = await this.prisma.service.findFirst({
       where: {
@@ -39,15 +52,34 @@ export class ServicesService {
       );
     }
 
-    return this.prisma.service.create({
+    const service = await this.prisma.service.create({
       data: {
         name,
         category,
         basePrice,
         commonIssues,
         status,
+        ...(specializationId ? { specializationId } : {}),
+        ...(specializationIds.length
+          ? {
+              specializations: {
+                create: specializationIds.map((id) => ({
+                  specialization: {
+                    connect: { id },
+                  },
+                })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        specializations: {
+          include: { specialization: true },
+        },
       },
     });
+
+    return this.flattenService(service);
   }
 
   async findAll(params: {
@@ -85,10 +117,17 @@ export class ServicesService {
 
     const usePagination = Number(page) > 0 || Number(limit) > 0;
     if (!usePagination) {
-      return this.prisma.service.findMany({
+      const data = await this.prisma.service.findMany({
         where,
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
+        include: {
+          specializations: {
+            include: { specialization: true },
+          },
+        },
       });
+
+      return data.map((service) => this.flattenService(service));
     }
 
     const totalItems = await this.prisma.service.count({ where });
@@ -98,20 +137,33 @@ export class ServicesService {
       skip,
       take,
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
+      include: {
+        specializations: {
+          include: { specialization: true },
+        },
+      },
     });
 
-    return { data, meta };
+    return {
+      data: data.map((service) => this.flattenService(service)),
+      meta,
+    };
   }
 
   async findOne(id: string, includeInactive = false) {
     const service = await this.prisma.service.findUnique({
       where: { id },
+      include: {
+        specializations: {
+          include: { specialization: true },
+        },
+      },
     });
     if (!service) throw new NotFoundException('Service not found');
     if (!includeInactive && service.status !== ServiceStatus.ACTIVE) {
       throw new NotFoundException('Service not found');
     }
-    return service;
+    return this.flattenService(service);
   }
 
   async update(id: string, updateServiceDto: UpdateServiceDto) {
@@ -126,6 +178,7 @@ export class ServicesService {
       basePrice?: number;
       commonIssues?: string[];
       status?: ServiceStatus;
+      specializationId?: string | null;
     } = {};
 
     if (updateServiceDto.name !== undefined) {
@@ -152,6 +205,23 @@ export class ServicesService {
       data.status = updateServiceDto.status;
     }
 
+    if (updateServiceDto.specializationId !== undefined) {
+      data.specializationId = this.normalizeOptionalId(
+        updateServiceDto.specializationId,
+        'specializationId',
+      );
+      await this.ensureSpecializationsExist(
+        data.specializationId ? [data.specializationId] : [],
+      );
+    }
+
+    const specializationIds = this.normalizeSpecializationIds(
+      updateServiceDto.specializationIds,
+    );
+    if (updateServiceDto.specializationIds) {
+      await this.ensureSpecializationsExist(specializationIds);
+    }
+
     if (data.name || data.category) {
       const nextName = data.name ?? existing.name;
       const nextCategory = data.category ?? existing.category;
@@ -174,10 +244,35 @@ export class ServicesService {
       }
     }
 
-    return this.prisma.service.update({
+    const service = await this.prisma.service.update({
       where: { id },
-      data,
+      data: {
+        ...data,
+        ...(updateServiceDto.specializationIds
+          ? {
+              specializations: {
+                deleteMany: {},
+                ...(specializationIds.length
+                  ? {
+                      create: specializationIds.map((id) => ({
+                        specialization: {
+                          connect: { id },
+                        },
+                      })),
+                    }
+                  : {}),
+              },
+            }
+          : {}),
+      },
+      include: {
+        specializations: {
+          include: { specialization: true },
+        },
+      },
     });
+
+    return this.flattenService(service);
   }
 
   async remove(id: string) {
@@ -238,5 +333,74 @@ export class ServicesService {
     }
 
     return issues;
+  }
+
+  private normalizeOptionalId(value: string | undefined, field: string) {
+    if (value === undefined || value === null) {
+      return undefined;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new BadRequestException(`${field} must not be empty`);
+    }
+
+    return normalized;
+  }
+
+  private normalizeSpecializationIds(value?: string[]) {
+    if (!value) {
+      return [];
+    }
+
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        'specializationIds must be an array of strings',
+      );
+    }
+
+    const seen = new Set<string>();
+    const result: string[] = [];
+
+    for (const item of value) {
+      if (typeof item !== 'string') {
+        continue;
+      }
+      const trimmed = item.trim();
+      if (!trimmed) {
+        continue;
+      }
+      const key = trimmed.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(trimmed);
+      }
+    }
+
+    return result;
+  }
+
+  private flattenService(service: {
+    specializations?: { specialization: { id: string; name: string } }[];
+  }) {
+    const { specializations, ...rest } = service;
+    return {
+      ...rest,
+      specializations: specializations?.map((item) => item.specialization) ?? [],
+    };
+  }
+
+  private async ensureSpecializationsExist(ids: string[]) {
+    if (ids.length === 0) {
+      return;
+    }
+
+    const existing = await this.prisma.specialization.count({
+      where: { id: { in: ids } },
+    });
+
+    if (existing !== ids.length) {
+      throw new BadRequestException('Invalid specializationIds');
+    }
   }
 }

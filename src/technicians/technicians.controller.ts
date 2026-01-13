@@ -1,21 +1,21 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
-  Query,
+  Controller,
   Delete,
+  Get,
+  Param,
   ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
 } from '@nestjs/common';
-import { ApiBody, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { TechniciansService } from './technicians.service';
+import { ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Role, TechnicianStatus } from '@prisma/client';
+import { Roles } from '../common/decorator/rolesDecorator';
+import { CreateSpecializationDto } from './dto/create-specialization.dto';
 import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
-import { Roles } from '../common/decorator/rolesDecorator';
-import { Role, TechnicianStatus } from '@prisma/client';
-import { CreateSpecializationDto } from './dto/create-specialization.dto';
+import { TechniciansService } from './technicians.service';
 
 @ApiTags('Technicians')
 @Controller('technicians')
@@ -92,7 +92,9 @@ export class TechniciansController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update a technician' })
+  @ApiOperation({
+    summary: 'Update a technician from scratch except email change',
+  })
   @ApiBody({ type: UpdateTechnicianDto })
   @Roles(Role.ADMIN)
   update(
