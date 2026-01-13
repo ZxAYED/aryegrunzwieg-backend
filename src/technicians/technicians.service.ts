@@ -8,6 +8,7 @@ import { Prisma, Role, TechnicianStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { sendResponse } from '../utils/sendResponse';
 import { CreateSpecializationDto } from './dto/create-specialization.dto';
 import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
@@ -27,19 +28,24 @@ export class TechniciansService {
       throw new ConflictException('Specialization already exists');
     }
 
-    return this.prisma.specialization.create({
+    const specialization = await this.prisma.specialization.create({
       data: { name },
     });
+    return sendResponse('Specialization created successfully', specialization);
   }
 
   async listSpecializations(search?: string) {
     const trimmed = search?.trim();
-    return this.prisma.specialization.findMany({
+    const specializations = await this.prisma.specialization.findMany({
       where: trimmed
         ? { name: { contains: trimmed, mode: Prisma.QueryMode.insensitive } }
         : {},
       orderBy: { name: 'asc' },
     });
+    return sendResponse(
+      'Specializations fetched successfully',
+      specializations,
+    );
   }
 
   async getSpecialization(id: string) {
@@ -49,7 +55,7 @@ export class TechniciansService {
     if (!specialization) {
       throw new NotFoundException('Specialization not found');
     }
-    return specialization;
+    return sendResponse('Specialization fetched successfully', specialization);
   }
 
   async deleteSpecialization(id: string) {
@@ -65,7 +71,7 @@ export class TechniciansService {
       where: { id },
     });
 
-    return { success: true, id };
+    return sendResponse('Specialization deleted successfully', { id });
   }
 
   async create(createTechnicianDto: CreateTechnicianDto) {
@@ -96,7 +102,7 @@ export class TechniciansService {
 
     const passwordHash = await bcrypt.hash(createTechnicianDto.password, 12);
 
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
@@ -136,6 +142,7 @@ export class TechniciansService {
 
       return this.flattenTechnician(technician);
     });
+    return sendResponse('Technician created successfully', created);
   }
 
   async findAll(params: {
@@ -188,10 +195,10 @@ export class TechniciansService {
 
     const pagination = getPagination(page, limit, totalItems);
 
-    return {
+    return sendResponse('Technicians fetched successfully', {
       data: data.map((technician) => this.flattenTechnician(technician)),
       meta: pagination.meta,
-    };
+    });
   }
 
   async findOne(id: string) {
@@ -212,7 +219,10 @@ export class TechniciansService {
       throw new NotFoundException('Technician not found');
     }
 
-    return this.flattenTechnician(technician);
+    return sendResponse(
+      'Technician fetched successfully',
+      this.flattenTechnician(technician),
+    );
   }
 
   async update(id: string, updateTechnicianDto: UpdateTechnicianDto) {
@@ -270,7 +280,7 @@ export class TechniciansService {
       await this.ensureSpecializationsExist(specializationIds);
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (data.email && existing.userId) {
         const userDuplicate = await tx.user.findFirst({
           where: {
@@ -326,6 +336,7 @@ export class TechniciansService {
 
       return this.flattenTechnician(technician);
     });
+    return sendResponse('Technician updated successfully', updated);
   }
 
   async remove(id: string) {
@@ -337,7 +348,7 @@ export class TechniciansService {
       throw new NotFoundException('Technician not found');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const removed = await this.prisma.$transaction(async (tx) => {
       if (technician.userId) {
         await tx.user.update({
           where: { id: technician.userId },
@@ -351,6 +362,7 @@ export class TechniciansService {
 
       return { success: true, id: technician.id };
     });
+    return sendResponse('Technician deleted successfully', removed);
   }
 
   private normalizeText(value: string, field: string) {

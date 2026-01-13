@@ -7,8 +7,19 @@ import {
 import { Prisma, ServiceStatus } from '@prisma/client';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { sendResponse } from '../utils/sendResponse';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+
+const serviceInclude = Prisma.validator<Prisma.ServiceInclude>()({
+  specializations: {
+    include: { specialization: true },
+  },
+});
+
+type ServiceWithSpecializations = Prisma.ServiceGetPayload<{
+  include: typeof serviceInclude;
+}>;
 
 @Injectable()
 export class ServicesService {
@@ -20,23 +31,15 @@ export class ServicesService {
     const basePrice = this.normalizeBasePrice(createServiceDto.basePrice);
     const commonIssues = this.normalizeIssues(createServiceDto.commonIssues);
     const status = createServiceDto.status ?? ServiceStatus.ACTIVE;
-    const specializationId = this.normalizeOptionalId(
-      createServiceDto.specializationId,
-      'specializationId',
-    );
     const specializationIds = this.normalizeSpecializationIds(
       createServiceDto.specializationIds,
     );
 
     if (commonIssues.length === 0) {
-      throw new BadRequestException('commonIssues must not be empty');
+      throw new BadRequestException('CommonIssues must not be empty');
     }
 
-    await this.ensureSpecializationsExist(
-      [specializationId, ...specializationIds].filter(
-        (id): id is string => Boolean(id),
-      ),
-    );
+    await this.ensureSpecializationsExist(specializationIds);
 
     const duplicate = await this.prisma.service.findFirst({
       where: {
@@ -59,7 +62,6 @@ export class ServicesService {
         basePrice,
         commonIssues,
         status,
-        ...(specializationId ? { specializationId } : {}),
         ...(specializationIds.length
           ? {
               specializations: {
@@ -72,14 +74,13 @@ export class ServicesService {
             }
           : {}),
       },
-      include: {
-        specializations: {
-          include: { specialization: true },
-        },
-      },
+      include: serviceInclude,
     });
 
-    return this.flattenService(service);
+    return sendResponse(
+      'Service created successfully',
+      this.flattenService(service),
+    );
   }
 
   async findAll(params: {
@@ -120,14 +121,13 @@ export class ServicesService {
       const data = await this.prisma.service.findMany({
         where,
         orderBy: [{ category: 'asc' }, { name: 'asc' }],
-        include: {
-          specializations: {
-            include: { specialization: true },
-          },
-        },
+        include: serviceInclude,
       });
 
-      return data.map((service) => this.flattenService(service));
+      return sendResponse(
+        'Services fetched successfully',
+        data.map((service) => this.flattenService(service)),
+      );
     }
 
     const totalItems = await this.prisma.service.count({ where });
@@ -137,33 +137,28 @@ export class ServicesService {
       skip,
       take,
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
-      include: {
-        specializations: {
-          include: { specialization: true },
-        },
-      },
+      include: serviceInclude,
     });
 
-    return {
+    return sendResponse('Services fetched successfully', {
       data: data.map((service) => this.flattenService(service)),
       meta,
-    };
+    });
   }
 
   async findOne(id: string, includeInactive = false) {
     const service = await this.prisma.service.findUnique({
       where: { id },
-      include: {
-        specializations: {
-          include: { specialization: true },
-        },
-      },
+      include: serviceInclude,
     });
     if (!service) throw new NotFoundException('Service not found');
     if (!includeInactive && service.status !== ServiceStatus.ACTIVE) {
       throw new NotFoundException('Service not found');
     }
-    return this.flattenService(service);
+    return sendResponse(
+      'Service fetched successfully',
+      this.flattenService(service),
+    );
   }
 
   async update(id: string, updateServiceDto: UpdateServiceDto) {
@@ -178,7 +173,6 @@ export class ServicesService {
       basePrice?: number;
       commonIssues?: string[];
       status?: ServiceStatus;
-      specializationId?: string | null;
     } = {};
 
     if (updateServiceDto.name !== undefined) {
@@ -196,23 +190,13 @@ export class ServicesService {
     if (updateServiceDto.commonIssues !== undefined) {
       const issues = this.normalizeIssues(updateServiceDto.commonIssues);
       if (issues.length === 0) {
-        throw new BadRequestException('commonIssues must not be empty');
+        throw new BadRequestException('CommonIssues must not be empty');
       }
       data.commonIssues = issues;
     }
 
     if (updateServiceDto.status !== undefined) {
       data.status = updateServiceDto.status;
-    }
-
-    if (updateServiceDto.specializationId !== undefined) {
-      data.specializationId = this.normalizeOptionalId(
-        updateServiceDto.specializationId,
-        'specializationId',
-      );
-      await this.ensureSpecializationsExist(
-        data.specializationId ? [data.specializationId] : [],
-      );
     }
 
     const specializationIds = this.normalizeSpecializationIds(
@@ -265,14 +249,13 @@ export class ServicesService {
             }
           : {}),
       },
-      include: {
-        specializations: {
-          include: { specialization: true },
-        },
-      },
+      include: serviceInclude,
     });
 
-    return this.flattenService(service);
+    return sendResponse(
+      'Service updated successfully',
+      this.flattenService(service),
+    );
   }
 
   async remove(id: string) {
@@ -283,15 +266,17 @@ export class ServicesService {
     if (!service) throw new NotFoundException('Service not found');
 
     if (service._count.orders > 0) {
-      return this.prisma.service.update({
+      const updated = await this.prisma.service.update({
         where: { id },
         data: { status: ServiceStatus.INACTIVE },
       });
+      return sendResponse('Service deactivated successfully', updated);
     }
 
-    return this.prisma.service.delete({
+    const deleted = await this.prisma.service.delete({
       where: { id },
     });
+    return sendResponse('Service deleted successfully', deleted);
   }
 
   private normalizeText(value: string, field: string) {
@@ -335,19 +320,6 @@ export class ServicesService {
     return issues;
   }
 
-  private normalizeOptionalId(value: string | undefined, field: string) {
-    if (value === undefined || value === null) {
-      return undefined;
-    }
-
-    const normalized = value.trim();
-    if (!normalized) {
-      throw new BadRequestException(`${field} must not be empty`);
-    }
-
-    return normalized;
-  }
-
   private normalizeSpecializationIds(value?: string[]) {
     if (!value) {
       return [];
@@ -380,13 +352,12 @@ export class ServicesService {
     return result;
   }
 
-  private flattenService(service: {
-    specializations?: { specialization: { id: string; name: string } }[];
-  }) {
+  private flattenService(service: ServiceWithSpecializations) {
     const { specializations, ...rest } = service;
     return {
       ...rest,
-      specializations: specializations?.map((item) => item.specialization) ?? [],
+      specializations:
+        specializations?.map((item) => item.specialization) ?? [],
     };
   }
 

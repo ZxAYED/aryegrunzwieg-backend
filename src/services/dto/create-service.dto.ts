@@ -51,11 +51,6 @@ export class CreateServiceDto {
   status?: ServiceStatus;
 
   @IsOptional()
-  @IsUUID('4')
-  @ApiPropertyOptional({ example: 'de2644a4-5de9-4140-806a-dc51f9324fd1' })
-  specializationId?: string;
-
-  @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
   @ApiPropertyOptional({

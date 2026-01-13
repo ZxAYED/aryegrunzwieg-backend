@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { getPagination } from '../common/utils/pagination';
 import { PrismaService } from '../prisma/prisma.service';
+import { sendResponse } from '../utils/sendResponse';
 import { uploadFileToSupabase } from '../utils/supabase/uploadFileToSupabase';
 import {
   CreateCustomerAddressDto,
@@ -63,10 +64,10 @@ export class CustomersService {
 
     const pagination = getPagination(page, limit, totalItems);
 
-    return {
+    return sendResponse('Customers fetched successfully', {
       data: enrichedData,
       meta: pagination.meta,
-    };
+    });
   }
 
   async findOne(id: string) {
@@ -90,7 +91,10 @@ export class CustomersService {
       0,
     );
 
-    return { ...customer, totalSpent };
+    return sendResponse('Customer fetched successfully', {
+      ...customer,
+      totalSpent,
+    });
   }
 
   async findByUserId(userId: string) {
@@ -103,7 +107,7 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
-    return customer;
+    return sendResponse('Customer profile fetched successfully', customer);
   }
 
   async update(
@@ -120,7 +124,12 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
-    return this.updateCustomerRecord(existing.id, updateCustomerDto, file);
+    const updated = await this.updateCustomerRecord(
+      existing.id,
+      updateCustomerDto,
+      file,
+    );
+    return sendResponse('Customer updated successfully', updated);
   }
 
   async updateByUserId(
@@ -137,17 +146,23 @@ export class CustomersService {
       throw new NotFoundException('Customer not found');
     }
 
-    return this.updateCustomerRecord(existing.id, updateCustomerDto, file);
+    const updated = await this.updateCustomerRecord(
+      existing.id,
+      updateCustomerDto,
+      file,
+    );
+    return sendResponse('Customer updated successfully', updated);
   }
 
   // Address CRUD helpers
   async listAddresses(customerId: string) {
     await this.ensureCustomerExists(customerId);
 
-    return this.prisma.address.findMany({
+    const addresses = await this.prisma.address.findMany({
       where: { customerId },
       orderBy: { createdAt: 'desc' },
     });
+    return sendResponse('Addresses fetched successfully', addresses);
   }
 
   async createAddress(customerId: string, dto: CreateCustomerAddressDto) {
@@ -159,8 +174,9 @@ export class CustomersService {
       ...(typeof isDefault === 'boolean' ? { isDefault } : {}),
     };
 
+    let created;
     if (isDefault) {
-      return this.prisma.$transaction(async (tx) => {
+      created = await this.prisma.$transaction(async (tx) => {
         await tx.address.updateMany({
           where: { customerId },
           data: { isDefault: false },
@@ -174,14 +190,16 @@ export class CustomersService {
           },
         });
       });
+    } else {
+      created = await this.prisma.address.create({
+        data: {
+          ...createData,
+          customerId,
+        },
+      });
     }
 
-    return this.prisma.address.create({
-      data: {
-        ...createData,
-        customerId,
-      },
-    });
+    return sendResponse('Address created successfully', created);
   }
 
   async updateAddress(
@@ -203,8 +221,9 @@ export class CustomersService {
       ...(typeof isDefault === 'boolean' ? { isDefault } : {}),
     };
 
+    let updated;
     if (isDefault) {
-      return this.prisma.$transaction(async (tx) => {
+      updated = await this.prisma.$transaction(async (tx) => {
         await tx.address.updateMany({
           where: { customerId, NOT: { id: addressId } },
           data: { isDefault: false },
@@ -215,12 +234,14 @@ export class CustomersService {
           data: { ...updateData, isDefault: true },
         });
       });
+    } else {
+      updated = await this.prisma.address.update({
+        where: { id: addressId },
+        data: updateData,
+      });
     }
 
-    return this.prisma.address.update({
-      where: { id: addressId },
-      data: updateData,
-    });
+    return sendResponse('Address updated successfully', updated);
   }
 
   async deleteAddress(customerId: string, addressId: string) {
@@ -237,12 +258,12 @@ export class CustomersService {
       where: { id: addressId },
     });
 
-    return { success: true };
+    return sendResponse('Address deleted successfully', { id: addressId });
   }
 
   async listAddressesByUserId(userId: string) {
     const customerId = await this.getCustomerIdByUserId(userId);
-    return this.prisma.address.findMany({
+    const addresses = await this.prisma.address.findMany({
       where: { customerId },
       orderBy: { createdAt: 'desc' },
       // select: {
@@ -255,6 +276,7 @@ export class CustomersService {
       //   zip: true,
       // }
     });
+    return sendResponse('Addresses fetched successfully', addresses);
   }
 
   async createAddressByUserId(userId: string, dto: CreateCustomerAddressDto) {
@@ -265,8 +287,9 @@ export class CustomersService {
       ...(typeof isDefault === 'boolean' ? { isDefault } : {}),
     };
 
+    let created;
     if (isDefault) {
-      return this.prisma.$transaction(async (tx) => {
+      created = await this.prisma.$transaction(async (tx) => {
         await tx.address.updateMany({
           where: { customerId },
           data: { isDefault: false },
@@ -280,14 +303,16 @@ export class CustomersService {
           },
         });
       });
+    } else {
+      created = await this.prisma.address.create({
+        data: {
+          ...createData,
+          customerId,
+        },
+      });
     }
 
-    return this.prisma.address.create({
-      data: {
-        ...createData,
-        customerId,
-      },
-    });
+    return sendResponse('Address created successfully', created);
   }
 
   async updateAddressByUserId(
@@ -310,8 +335,9 @@ export class CustomersService {
       ...(typeof isDefault === 'boolean' ? { isDefault } : {}),
     };
 
+    let updated;
     if (isDefault) {
-      return this.prisma.$transaction(async (tx) => {
+      updated = await this.prisma.$transaction(async (tx) => {
         await tx.address.updateMany({
           where: { customerId, NOT: { id: addressId } },
           data: { isDefault: false },
@@ -322,12 +348,14 @@ export class CustomersService {
           data: { ...updateData, isDefault: true },
         });
       });
+    } else {
+      updated = await this.prisma.address.update({
+        where: { id: addressId },
+        data: updateData,
+      });
     }
 
-    return this.prisma.address.update({
-      where: { id: addressId },
-      data: updateData,
-    });
+    return sendResponse('Address updated successfully', updated);
   }
 
   async deleteAddressByUserId(userId: string, addressId: string) {
@@ -345,7 +373,7 @@ export class CustomersService {
       where: { id: addressId },
     });
 
-    return { success: true };
+    return sendResponse('Address deleted successfully', { id: addressId });
   }
 
   private async ensureCustomerExists(customerId: string) {
